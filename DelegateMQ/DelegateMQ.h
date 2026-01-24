@@ -1,0 +1,163 @@
+#ifndef _DELEGATE_MQ_H
+#define _DELEGATE_MQ_H
+
+// Delegate.h
+// @see https://github.com/endurodave/DelegateMQ
+// David Lafreniere, 2025.
+
+/// @file DelegateMQ.h
+/// @brief A single-include header for the complete DelegateMQ library functionality.
+///
+/// @details
+/// DelegateMQ is a robust C++ delegate library that enables invoking any callable function 
+/// (synchronously or asynchronously) on a specific user-defined thread of control. It also 
+/// supports remote function invocation over any transport protocol.
+///
+/// **Key Features:**
+/// * **Universal Target Support:** Binds to free functions, class member functions, static functions, 
+///   lambdas, and `std::function`.
+/// * **Any Signature:** Handles any function signature with any number of arguments or return values.
+/// * **Argument Safety:** Supports all argument types (value, pointer, pointer-to-pointer, reference) 
+///   and safely marshals them across thread boundaries for asynchronous calls.
+/// * **Thread Control:** Unlike `std::async` (which uses a random thread pool), DelegateMQ executes 
+///   the target function on a *specific* destination thread you control.
+/// * **Remote Invocation:** Capable of serializing arguments and invoking functions across network 
+///   boundaries (UDP, TCP, ZeroMQ, etc.).
+///
+/// **Delegate Capabilities:**
+/// A delegate instance behaves like a first-class object:
+/// * **Copyable:** Can be copied freely.
+/// * **Comparable:** Supports equality checks against other delegates or `nullptr`.
+/// * **Assignable:** Can be reassigned at runtime.
+/// * **Callable:** Invoked via `operator()`.
+///
+/// **Common Use Cases:**
+/// * Asynchronous Method Invocation (AMI) on specific worker threads.
+/// * Publish / Subscribe (Observer) patterns.
+/// * Anonymous, thread-safe asynchronous callbacks.
+/// * Event-Driven Programming architectures.
+/// * Thread-Safe Asynchronous APIs.
+/// * Active Object design patterns.
+///
+/// **Asynchronous Safety:**
+/// Asynchronous variants automatically copy argument data into the event queue. This provides true 
+/// 'fire and forget' functionality, ensuring that out-of-scope stack variables in the caller 
+/// do not cause data races or corruption in the target thread.
+///
+/// **Error Handling:**
+/// The `Async` and `AsyncWait` variants may throw `std::bad_alloc` if heap allocation fails during 
+/// invocation. Alternatively, defining `DMQ_ASSERTS` switches error handling to assertions. 
+/// All other delegate functions are `noexcept`.
+///
+/// **Documentation & Source:**
+/// * Repository: https://github.com/endurodave/DelegateMQ
+/// * See `README.md`, `DETAILS.md`, and `EXAMPLES.md` for comprehensive guides.
+
+// -----------------------------------------------------------------------------
+// 1. Core Non-Thread-Safe Delegates
+// (Always available: Bare Metal, FreeRTOS, Windows, Linux)
+// -----------------------------------------------------------------------------
+#include "delegate/Delegate.h"
+#include "delegate/DelegateRemote.h"
+#include "delegate/MulticastDelegate.h"
+#include "delegate/UnicastDelegate.h"
+#include "delegate/Signal.h"
+
+// -----------------------------------------------------------------------------
+// 2. Thread-Safe Wrappers (Mutex Only)
+// -----------------------------------------------------------------------------
+// - FreeRTOS: Uses FreeRTOSRecursiveMutex
+// - Bare Metal: Uses NullMutex
+// - StdLib: Uses std::recursive_mutex
+#if defined(DMQ_THREAD_STDLIB) || defined(DMQ_THREAD_FREERTOS) || defined(DMQ_THREAD_NONE)
+    #include "delegate/MulticastDelegateSafe.h"
+    #include "delegate/UnicastDelegateSafe.h"
+    #include "delegate/SignalSafe.h"
+#endif
+
+// -----------------------------------------------------------------------------
+// 3. Asynchronous "Fire and Forget" Delegates
+// -----------------------------------------------------------------------------
+// - FreeRTOS: OK 
+// - Bare Metal: OK (Requires you to implement IThread wrapper for Event Loop)
+// - StdLib: OK
+#if defined(DMQ_THREAD_STDLIB) || defined(DMQ_THREAD_FREERTOS) || defined(DMQ_THREAD_NONE)
+    #include "delegate/DelegateAsync.h"
+#endif
+
+// -----------------------------------------------------------------------------
+// 4. Asynchronous "Blocking" Delegates (Wait for Result)
+// -----------------------------------------------------------------------------
+// - FreeRTOS: NO (Requires Semaphore/Condition Variable)
+// - Bare Metal: NO (Cannot block/sleep)
+// - StdLib: OK
+#if defined(DMQ_THREAD_STDLIB)
+    #include "delegate/DelegateAsyncWait.h"
+#endif
+
+#if defined(DMQ_THREAD_STDLIB)
+    #include "predef/os/stdlib/Thread.h"
+    #include "predef/os/stdlib/ThreadMsg.h"
+#elif defined(DMQ_THREAD_FREERTOS)
+    #include "predef/os/freertos/Thread.h"
+    #include "predef/os/freertos/ThreadMsg.h"
+#elif defined(DMQ_THREAD_NONE)
+    // Bare metal: User must implement their own polling/interrupt logic
+#else
+    #error "Thread implementation not found."
+#endif
+
+#if defined(DMQ_SERIALIZE_MSGPACK)
+    #include "predef/serialize/msgpack/Serializer.h"
+#elif defined(DMQ_SERIALIZE_CEREAL)
+    #include "predef/serialize/cereal/Serializer.h"
+#elif defined(DMQ_SERIALIZE_BITSERY)
+    #include "predef/serialize/bitsery/Serializer.h"
+#elif defined(DMQ_SERIALIZE_RAPIDJSON)
+    #include "predef/serialize/rapidjson/Serializer.h"
+#elif defined(DMQ_SERIALIZE_SERIALIZE)
+    #include "predef/serialize/serialize/Serializer.h"
+#elif defined(DMQ_SERIALIZE_NONE)
+    // Create a custom application-specific serializer
+#else
+    #error "Serialize implementation not found."
+#endif
+
+#if defined(DMQ_TRANSPORT_ZEROMQ)
+    #include "predef/dispatcher/Dispatcher.h"
+    #include "predef/transport/zeromq/ZeroMqTransport.h"
+#elif defined(DMQ_TRANSPORT_NNG)
+    #include "predef/dispatcher/Dispatcher.h"
+    #include "predef/transport/nng/NngTransport.h"
+#elif defined(DMQ_TRANSPORT_WIN32_PIPE)
+    #include "predef/dispatcher/Dispatcher.h"
+    #include "predef/transport/win32-pipe/Win32PipeTransport.h"
+#elif defined(DMQ_TRANSPORT_WIN32_UDP)
+    #include "predef/dispatcher/Dispatcher.h"
+    #include "predef/transport/win32-udp/Win32UdpTransport.h"
+#elif defined(DMQ_TRANSPORT_LINUX_UDP)
+    #include "predef/dispatcher/Dispatcher.h"
+    #include "predef/transport/linux-udp/LinuxUdpTransport.h"
+#elif defined(DMQ_TRANSPORT_MQTT)
+    #include "predef/dispatcher/Dispatcher.h"
+    #include "predef/transport/mqtt/MqttTransport.h"
+#elif defined(DMQ_TRANSPORT_NONE)
+    // Create a custom application-specific transport
+#else
+    #error "Transport implementation not found."
+#endif
+
+#if defined(DMQ_TRANSPORT_ZEROMQ) || defined(DMQ_TRANSPORT_WIN32_UDP) || defined(DMQ_TRANSPORT_LINUX_UDP)
+    #include "predef/util/NetworkEngine.h"
+#endif
+
+#include "predef/util/Fault.h"
+
+// Only include Timer and AsyncInvoke if threads exist
+#if !defined(DMQ_THREAD_NONE)
+    #include "predef/util/Timer.h"
+    #include "predef/util/AsyncInvoke.h"
+    #include "predef/util/TransportMonitor.h"
+#endif
+
+#endif
