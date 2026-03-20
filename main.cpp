@@ -9,9 +9,21 @@
 #include "Examples/Examples.h"
 #include <stdio.h>
 #include <iostream>
+#include <filesystem>
+
+void DeleteDatabaseFiles() {
+    try {
+        std::filesystem::remove("simple.db");
+        std::filesystem::remove("futures.db");
+        std::filesystem::remove("prepared.db");
+        std::filesystem::remove("appender.db");
+        std::filesystem::remove("transactions.db");
+    } catch (...) {}
+}
 
 int main(void)
 {
+    DeleteDatabaseFiles();
     try {
         async::init_worker();
         
