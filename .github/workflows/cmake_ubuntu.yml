@@ -16,6 +16,11 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2  # Checkout the repository code
 
+    - name: Download DuckDB
+      run: |
+        wget https://github.com/duckdb/duckdb/releases/download/v1.4.3/libduckdb-linux-amd64.zip
+        unzip libduckdb-linux-amd64.zip -d DuckDB
+
     - name: Configure CMake
       run: cmake -S . -B build # Configure CMake to generate build files in 'build' directory
 

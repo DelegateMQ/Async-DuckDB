@@ -80,27 +80,26 @@ add_subdirectory(UnitTest)
 # ------------------------------------------------------------------------------
 # 6. Linking
 # ------------------------------------------------------------------------------
-# Locate the duckdb.lib in the DuckDB folder
-find_library(DUCKDB_LIB NAMES duckdb PATHS "${CMAKE_SOURCE_DIR}/DuckDB" NO_DEFAULT_PATH)
+# Locate the duckdb library
+find_library(DUCKDB_LIB NAMES duckdb libduckdb PATHS "${CMAKE_SOURCE_DIR}/DuckDB" NO_DEFAULT_PATH)
 
 target_link_libraries(Async-DuckDBApp PRIVATE 
-    ${DUCKDB_LIB}  # Link against duckdb.lib
-    ws2_32
-    rstrtmgr
-    bcrypt
-    winmm
+    ${DUCKDB_LIB}  # Link against duckdb library
+    $<$<PLATFORM_ID:Windows>:ws2_32 rstrtmgr bcrypt winmm>
     UnitTestLib
 )
 
 # ------------------------------------------------------------------------------
-# 7. Post-Build: Copy DLL
+# 7. Post-Build: Copy DLL (Windows Only)
 # ------------------------------------------------------------------------------
-# Automatically copy duckdb.dll to the exe folder so the app runs
-add_custom_command(TARGET Async-DuckDBApp POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${CMAKE_SOURCE_DIR}/DuckDB/duckdb.dll"
-    "$<TARGET_FILE_DIR:Async-DuckDBApp>"
-)
+# Automatically copy duckdb.dll to the exe folder so the app runs on Windows
+if (WIN32)
+    add_custom_command(TARGET Async-DuckDBApp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/DuckDB/duckdb.dll"
+        "$<TARGET_FILE_DIR:Async-DuckDBApp>"
+    )
+endif()
 
 # ------------------------------------------------------------------------------
 # 8. Compiler Options
