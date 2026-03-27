@@ -5,7 +5,7 @@
 [![Build Clang](https://github.com/endurodave/Async-DuckDB/actions/workflows/cmake_clang.yml/badge.svg)](https://github.com/endurodave/Async-DuckDB/actions/workflows/cmake_clang.yml)
 [![Build Windows](https://github.com/endurodave/Async-DuckDB/actions/workflows/cmake_windows.yml/badge.svg)](https://github.com/endurodave/Async-DuckDB/actions/workflows/cmake_windows.yml)
 
-An asynchronous, thread-safe C++ wrapper for [DuckDB](https://duckdb.org/) using [DelegateMQ](https://github.com/endurodave/DelegateMQ) for task-based marshalling.
+An asynchronous, thread-safe C++ wrapper for [DuckDB](https://duckdb.org/) using [DelegateMQ](https://github.com/DelegateMQ/DelegateMQ) for task-based marshalling.
 
 ---
 
@@ -51,7 +51,7 @@ DuckDB is a high-performance analytical database designed to run in-process. Whi
 ## References
 
 - [DuckDB](https://duckdb.org/) - The analytical database engine.
-- [DelegateMQ](https://github.com/endurodave/DelegateMQ) - The underlying messaging middleware used for thread marshalling.
+- [DelegateMQ](https://github.com/DelegateMQ/DelegateMQ) - The underlying messaging middleware used for thread marshalling.
 
 ## Quick Start
 

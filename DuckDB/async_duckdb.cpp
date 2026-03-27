@@ -1,5 +1,5 @@
 // Asynchronous DuckDB wrapper using C++ Delegates
-// @see https://github.com/endurodave/DelegateMQ
+// @see https://github.com/DelegateMQ/DelegateMQ
 // David Lafreniere, Jan 2026
 
 #include "async_duckdb.hpp"
