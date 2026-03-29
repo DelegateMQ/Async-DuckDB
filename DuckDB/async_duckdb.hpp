@@ -16,7 +16,7 @@
 // 
 // @author David Lafreniere
 // @date 2026
-// @see https://github.com/endurodave/Async-DuckDB
+// @see https://github.com/DelegateMQ/Async-DuckDB
 
 #ifndef ASYNC_DUCKDB_H
 #define ASYNC_DUCKDB_H

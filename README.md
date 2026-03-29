@@ -1,9 +1,9 @@
 # Async-DuckDB
 
 [![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Build Ubuntu](https://github.com/endurodave/Async-DuckDB/actions/workflows/cmake_ubuntu.yml/badge.svg)](https://github.com/endurodave/Async-DuckDB/actions/workflows/cmake_ubuntu.yml)
-[![Build Clang](https://github.com/endurodave/Async-DuckDB/actions/workflows/cmake_clang.yml/badge.svg)](https://github.com/endurodave/Async-DuckDB/actions/workflows/cmake_clang.yml)
-[![Build Windows](https://github.com/endurodave/Async-DuckDB/actions/workflows/cmake_windows.yml/badge.svg)](https://github.com/endurodave/Async-DuckDB/actions/workflows/cmake_windows.yml)
+[![Build Ubuntu](https://github.com/DelegateMQ/Async-DuckDB/actions/workflows/cmake_ubuntu.yml/badge.svg)](https://github.com/DelegateMQ/Async-DuckDB/actions/workflows/cmake_ubuntu.yml)
+[![Build Clang](https://github.com/DelegateMQ/Async-DuckDB/actions/workflows/cmake_clang.yml/badge.svg)](https://github.com/DelegateMQ/Async-DuckDB/actions/workflows/cmake_clang.yml)
+[![Build Windows](https://github.com/DelegateMQ/Async-DuckDB/actions/workflows/cmake_windows.yml/badge.svg)](https://github.com/DelegateMQ/Async-DuckDB/actions/workflows/cmake_windows.yml)
 
 An asynchronous, thread-safe C++ wrapper for [DuckDB](https://duckdb.org/) using [DelegateMQ](https://github.com/DelegateMQ/DelegateMQ) for task-based marshalling.
 
