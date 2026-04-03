@@ -45,10 +45,11 @@ file(GLOB SOURCES
     "Examples/StressTest.cpp"
 )
 
-list(APPEND SOURCES ${DMQ_PREDEF_SOURCES})
+list(APPEND SOURCES ${DMQ_PORT_SOURCES})
 
 source_group("Delegate Files" FILES ${DMQ_LIB_SOURCES})
-source_group("Predef Files" FILES ${DMQ_PREDEF_SOURCES})
+source_group("Port Files" FILES ${DMQ_PORT_ONLY_SOURCES})
+source_group("Extras Files" FILES ${DMQ_EXTRAS_SOURCES})
 source_group("DuckDB Files" FILES "DuckDB/async_duckdb.cpp" "DuckDB/async_duckdb.hpp")
 source_group("Example Files" FILES 
     "Examples/SimpleExample.cpp" 
