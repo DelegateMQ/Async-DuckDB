@@ -19,7 +19,7 @@ using namespace dmq;
 namespace async
 {
     // A private worker thread instance
-    static Thread DuckThread("DuckDB Thread");
+    static dmq::os::Thread DuckThread("DuckDB Thread");
     static std::atomic<IThread*> CentralThread{ &DuckThread };
 
     const std::string PreparedStatement::m_empty_error = "";
