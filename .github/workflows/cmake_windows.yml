@@ -8,9 +8,10 @@ on:
     branches:
       - main  # Trigger on pull 
 
+
 jobs:
   build:
-    runs-on: windows-latest  # Use Windows environment for the build
+    runs-on: windows-2022  # Use Windows environment for the build
 
     steps:
     - name: Checkout code
@@ -21,14 +22,13 @@ jobs:
         Invoke-WebRequest -Uri https://github.com/duckdb/duckdb/releases/download/v1.4.3/libduckdb-windows-amd64.zip -OutFile libduckdb-windows-amd64.zip
         Expand-Archive -Path libduckdb-windows-amd64.zip -DestinationPath DuckDB -Force
 
-    - name: Set up Visual Studio
-      uses: microsoft/setup-msbuild@v2  # Set up Visual Studio environment (MSBuild)
-
     - name: Configure CMake
-      run: cmake -S . -B build -G "Visual Studio 17 2022" # Configure CMake for Visual Studio
+      run: cmake -S . -B build # Configure CMake for Visual Studio
 
     - name: Build
       run: cmake --build build --config Release  # Build the project using CMake with Release configuration
 
     - name: Run Async-DuckDBApp
       run: .\build\Release\Async-DuckDBApp.exe  # Run the built executable (adjust path for MSBuild)
+
+

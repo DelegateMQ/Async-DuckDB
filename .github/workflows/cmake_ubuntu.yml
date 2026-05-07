@@ -29,3 +29,5 @@ jobs:
 
     - name: Run Async-DuckDBApp
       run: ./build/Async-DuckDBApp  # Run the built executable
+
+
