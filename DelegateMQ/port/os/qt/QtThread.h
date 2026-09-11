@@ -1,8 +1,8 @@
-#ifndef _THREAD_ZEPHYR_H
-#define _THREAD_ZEPHYR_H
+#ifndef _QT_THREAD_H
+#define _QT_THREAD_H
 
-/// @file Thread.h
-/// @brief Zephyr RTOS implementation of the DelegateMQ IThread interface.
+/// @file QtThread.h
+/// @brief Qt implementation of the DelegateMQ IThread interface.
 ///
 /// @note This implementation is a basic port. For reference, the stdlib and win32
 /// implementations provide additional features:
@@ -10,40 +10,59 @@
 /// 2. Synchronized Startup: CreateThread() blocks until the worker thread is ready.
 ///
 /// **Key Features:**
-/// * **Task Integration:** Wraps `k_thread_create` to establish a dedicated worker loop.
-/// * **FullPolicy Support:** Configurable back-pressure (DROP or TIMEOUT) when the
-///   message queue is full.
-/// * **Queue-Based Dispatch:** Uses `k_msgq` to receive and process incoming
-///   delegate messages in a thread-safe manner.
+/// * **QThread Integration:** Wraps `QThread` and uses a Worker object to execute
+///   delegates in the target thread's event loop.
+/// * **FullPolicy Support:** Configurable back-pressure (DROP, FAULT, or TIMEOUT) using
+///   `QMutex` and `QWaitCondition`.
+/// * **Signal/Slot Dispatch:** Uses Qt's meta-object system to bridge delegate
+///   execution across thread boundaries.
 /// * **Watchdog Integration:** Optional heartbeat mechanism detects stalled or deadlocked
 ///   threads. Enable by passing a timeout to CreateThread(). Requires
 ///   Timer::ProcessTimers() to be called from a context that can preempt watched threads
 ///   -- typically a hardware timer ISR or the highest-priority task in the system.
+///
 
 #include "delegate/IThread.h"
-#include "ThreadMsg.h"
-#include "extras/util/Timer.h"
-#include <zephyr/kernel.h>
+#include <QThread>
+#include <QObject>
+#include <QMutex>
+#include <QWaitCondition>
 #include <memory>
 #include <atomic>
 #include <string>
 
 namespace dmq::os {
 
-/// @brief Policy applied when the thread message queue is full.
-/// @details Only meaningful when maxQueueSize > 0.
-///   - DROP:    DispatchDelegate() silently discards the message and returns immediately.
-///   - FAULT:   DispatchDelegate() triggers a system fault if the queue is full.
-///   - TIMEOUT: DispatchDelegate() waits up to dispatchTimeout, then logs and drops.
-///
-/// Use DROP for high-rate best-effort topics (sensor telemetry, display updates) where
-/// a stale sample is preferable to stalling the publisher. Use TIMEOUT for critical topics
-/// (commands, state transitions) where every message should be delivered if possible.
-/// FAULT is the default.
-enum class FullPolicy { DROP, FAULT, TIMEOUT };
+/// @brief Policy applied when the thread message queue is full. See dmq::FullPolicy
+/// in DelegateOpt.h for the canonical definition, shared by every dmq::os::Thread port.
+using FullPolicy = dmq::FullPolicy;
 
-class Thread : public dmq::IThread
+// ----------------------------------------------------------------------------
+// Worker Object
+// Lives on the target QThread and executes the slots
+// ----------------------------------------------------------------------------
+class QtThread;
+class Worker : public QObject
 {
+    Q_OBJECT
+public:
+    Worker(QtThread* thread = nullptr) : m_thread(thread) {}
+    void ClearThread() { m_thread = nullptr; }
+
+public slots:
+    void OnDispatch(std::shared_ptr<dmq::DelegateMsg> msg);
+
+signals:
+    void MessageProcessed();
+
+private:
+    QtThread* m_thread;
+};
+
+class QtThread : public QObject, public dmq::IThread
+{
+    Q_OBJECT
+
 public:
 #if defined(DMQ_DATABUS_TOOLS)
     /// @brief Statistics captured for thread monitoring.
@@ -68,47 +87,49 @@ public:
     static const size_t DEFAULT_QUEUE_SIZE = dmq::DEFAULT_QUEUE_SIZE;
 
     /// Constructor
-    /// @param threadName Name for the Zephyr thread
+    /// @param threadName Name for debugging (QObject::objectName)
     /// @param maxQueueSize Max number of messages in queue (0 = Default dmq::DEFAULT_QUEUE_SIZE)
     /// @param fullPolicy Action when queue is full: FAULT (default), DROP, or TIMEOUT.
     /// @param dispatchTimeout Duration to wait before giving up when policy is TIMEOUT.
     /// @param cpuName Optional CPU/Core name grouping for monitoring tools.
-    Thread(const char* threadName, size_t maxQueueSize = 0, FullPolicy fullPolicy = FullPolicy::FAULT,
+    QtThread(const char* threadName, size_t maxQueueSize = 0, FullPolicy fullPolicy = FullPolicy::FAULT,
            dmq::Duration dispatchTimeout = dmq::DEFAULT_DISPATCH_TIMEOUT, const char* cpuName = "");
 
-    Thread(const std::string& threadName, size_t maxQueueSize = 0, FullPolicy fullPolicy = FullPolicy::FAULT,
+    QtThread(const std::string& threadName, size_t maxQueueSize = 0, FullPolicy fullPolicy = FullPolicy::FAULT,
            dmq::Duration dispatchTimeout = dmq::DEFAULT_DISPATCH_TIMEOUT, const std::string& cpuName = "")
-        : Thread(threadName.c_str(), maxQueueSize, fullPolicy, dispatchTimeout, cpuName.c_str()) {}
+        : QtThread(threadName.c_str(), maxQueueSize, fullPolicy, dispatchTimeout, cpuName.c_str()) {}
 
-    ~Thread();
+    /// Destructor
+    ~QtThread();
 
-    /// Called once to create the worker thread. If watchdogTimeout value
+    /// Create and start the internal QThread. If watchdogTimeout value
     /// provided, the maximum watchdog interval is used. Otherwise no watchdog.
     /// @param[in] watchdogTimeout - optional watchdog timeout.
     /// @return TRUE if thread is created. FALSE otherwise.
     bool CreateThread(std::optional<dmq::Duration> watchdogTimeout = std::nullopt);
+
+    /// Stop the QThread
     void ExitThread();
 
-    // Note: k_tid_t is a struct k_thread* in Zephyr
-    k_tid_t GetThreadId();
-    static k_tid_t GetCurrentThreadId();
+    /// Get the QThread pointer (used as the ID)
+    QThread* GetThreadId();
+
+    /// Get the current executing QThread pointer
+    static QThread* GetCurrentThreadId();
 
     /// Returns true if the calling thread is this thread
     virtual bool IsCurrentThread() override;
 
-    /// Set the Zephyr Priority.
-    /// Can be called before or after CreateThread().
-    void SetThreadPriority(int priority);
-
-    dmq::xstring GetThreadName() { return THREAD_NAME; }
+    dmq::xstring GetThreadName() const { return m_threadName; }
 
     /// Get current queue size
-    size_t GetQueueSize();
+    size_t GetQueueSize() const { return m_queueSize.load(); }
 
     /// Sleep for a duration.
     /// @param[in] timeout - the duration to sleep.
     static void Sleep(dmq::Duration timeout);
 
+    // IThread Interface Implementation
     virtual bool DispatchDelegate(std::shared_ptr<dmq::DelegateMsg> msg) override;
 
     /// @brief Manually update the watchdog alive timestamp.
@@ -123,61 +144,51 @@ public:
 #if defined(DMQ_DATABUS_TOOLS)
     /// @brief Capture and reset windowed statistics.
     ThreadStats SnapshotStats();
+
+    /// @brief Internal method for Worker to update invoke stats.
+    void UpdateInvokeStats(dmq::Duration invokeTime);
 #endif
 
-private:
-    Thread(const Thread&) = delete;
-    Thread& operator=(const Thread&) = delete;
+signals:
+    // Internal signal to bridge threads
+    void SignalDispatch(std::shared_ptr<dmq::DelegateMsg> msg);
 
-    // Thread entry point
-    static void Process(void* p1, void* p2, void* p3);
-    void Run();
+private slots:
+    void OnMessageProcessed() { 
+        m_queueSize--; 
+        m_cvNotFull.wakeAll();
+    }
+
+private:
+    QtThread(const QtThread&) = delete;
+    QtThread& operator=(const QtThread&) = delete;
 
     /// Check watchdog is expired. Called from Timer::ProcessTimers() context.
     void WatchdogCheck();
 
     /// Get registry head using the "Immortal" Pattern
-    static Thread*& GetWatchdogHead();
+    static QtThread*& GetWatchdogHead();
 
     /// Get registry lock using the "Immortal" Pattern
     static dmq::RecursiveMutex& GetWatchdogLock();
 
-    const dmq::xstring THREAD_NAME;
-    const dmq::xstring CPU_NAME;
-    const size_t m_queueSize;
-    const FullPolicy FULL_POLICY;
+    const dmq::xstring m_threadName;
+    const dmq::xstring m_cpuName;
+    const size_t m_maxQueueSize;
+    const FullPolicy m_fullPolicy;
     const dmq::Duration m_dispatchTimeout;
-    int m_priority;
-
-    // Zephyr Kernel Objects
-    struct k_thread m_thread;
-    struct k_msgq m_msgq;
-    struct k_sem m_exitSem; // Semaphore to signal thread completion
-    std::atomic<bool> m_exit = false;
-
-    // Define pointer type for the message queue
-    using MsgPtr = ThreadMsg*;
-
-    // Custom deleter for Zephyr kernel memory (wraps k_free)
-    using ZephyrDeleter = void(*)(void*);
-
-    // Dynamically allocated stack and message queue buffer
-    // Managed by unique_ptr but allocated via k_aligned_alloc and freed via k_free
-    std::unique_ptr<char, ZephyrDeleter> m_stackMemory{nullptr, k_free};
-    std::unique_ptr<char, ZephyrDeleter> m_msgqBuffer{nullptr, k_free};
-
-    // Stack size in bytes
-    static const size_t STACK_SIZE = 2048;
-    // Size of one message item (the pointer)
-    static const size_t MSG_SIZE = sizeof(MsgPtr);
+    QThread* m_thread = nullptr;
+    Worker* m_worker = nullptr;
+    std::atomic<size_t> m_queueSize{0};
+    QMutex m_mutex;
+    QWaitCondition m_cvNotFull;
 
     // Watchdog related members
     std::atomic<dmq::TimePoint> m_lastAliveTime;
     std::atomic<dmq::Duration> m_watchdogTimeout;
-    Thread* m_watchdogNext = nullptr;
+    QtThread* m_watchdogNext = nullptr;
 
 #if defined(DMQ_DATABUS_TOOLS)
-    struct k_mutex m_statMutex; // Mutex to protect statistics
     // Monitoring statistics members
     size_t m_queueDepthMaxWindow = 0;
     size_t m_queueDepthMaxAll = 0;
@@ -196,6 +207,10 @@ private:
 #endif
 };
 
+/// @brief Backward-compatible name: existing code referencing dmq::os::Thread
+/// keeps compiling unchanged against the Qt port.
+using Thread = QtThread;
+
 } // namespace dmq::os
 
-#endif // _THREAD_ZEPHYR_H
+#endif // _QT_THREAD_H

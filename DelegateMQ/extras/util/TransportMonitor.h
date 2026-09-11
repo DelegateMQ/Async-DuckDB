@@ -3,7 +3,7 @@
 
 #include "delegate/DelegateOpt.h"
 #include "delegate/Signal.h"
-#include "../../port/transport/ITransportMonitor.h"
+#include "../../port/transport/common/ITransportMonitor.h"
 #include <cstdint>
 #include <array>
 #include <chrono>
@@ -53,7 +53,9 @@ public:
     /// Fired outside the internal lock so subscribers may call back into TransportMonitor safely.
     dmq::Signal<void(size_t)> OnPendingExceeded;
 
-    TransportMonitor(const dmq::Duration timeout = std::chrono::seconds(2)) : TRANSPORT_TIMEOUT(timeout) {}
+    /// @param timeout Per-message ACK timeout. Default is dmq::TRANSPORT_MONITOR_TIMEOUT
+    ///        (DMQ_TRANSPORT_MONITOR_TIMEOUT_SEC in delegatemqconfig.h).
+    TransportMonitor(const dmq::Duration timeout = dmq::TRANSPORT_MONITOR_TIMEOUT) : TRANSPORT_TIMEOUT(timeout) {}
 
     ~TransportMonitor()
     {
@@ -74,6 +76,11 @@ public:
 
             if (m_pending.size() >= dmq::MAX_TRANSPORT_MONITOR_PENDING) {
                 capSize = m_pending.size();
+            } else if (m_pending.find(key) != m_pending.end()) {
+                // Collision: 16-bit sequence wrapped before the old message timed out.
+                // Reject the send rather than silently clobbering the old message's tracking.
+                LOG_ERROR("TransportMonitor: SeqNum wraparound collision for seq {}", seqNum);
+                return false;
             } else {
                 TimeoutData d;
                 d.timeStamp = dmq::Clock::now();

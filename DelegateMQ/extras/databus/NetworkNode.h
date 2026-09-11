@@ -35,8 +35,12 @@
 ///
 /// @tparam Transport  Any ITransport-derived class with a nested Type enum
 ///                    providing Type::PUB (sender) and Type::SUB (receiver).
-/// @tparam MaxPeers   Maximum remote peers (fixed allocation, default 4).
-/// @tparam MaxTopics  Maximum in- or out-topics each (fixed, default 16).
+/// @tparam MaxPeers   Maximum remote peers (fixed allocation). Defaults to
+///                    dmq::NETWORK_NODE_MAX_PEERS (DMQ_NETWORK_NODE_MAX_PEERS
+///                    in delegatemqconfig.h).
+/// @tparam MaxTopics  Maximum in- or out-topics each (fixed allocation). Defaults
+///                    to dmq::NETWORK_NODE_MAX_TOPICS (DMQ_NETWORK_NODE_MAX_TOPICS
+///                    in delegatemqconfig.h).
 
 #include "DataBus.h"
 #include "extras/util/TransportMonitor.h"
@@ -54,19 +58,19 @@
 
 // Select the OS thread implementation based on the build configuration.
 #if defined(DMQ_THREAD_STDLIB)
-    #include "port/os/stdlib/Thread.h"
+    #include "port/os/stdlib/StdlibThread.h"
 #elif defined(DMQ_THREAD_WIN32)
-    #include "port/os/win32/Thread.h"
+    #include "port/os/win32/Win32Thread.h"
 #elif defined(DMQ_THREAD_FREERTOS)
-    #include "port/os/freertos/Thread.h"
+    #include "port/os/freertos/FreeRTOSThread.h"
 #elif defined(DMQ_THREAD_THREADX)
-    #include "port/os/threadx/Thread.h"
+    #include "port/os/threadx/ThreadXThread.h"
 #elif defined(DMQ_THREAD_ZEPHYR)
-    #include "port/os/zephyr/Thread.h"
+    #include "port/os/zephyr/ZephyrThread.h"
 #elif defined(DMQ_THREAD_CMSIS_RTOS2)
-    #include "port/os/cmsis-rtos2/Thread.h"
+    #include "port/os/cmsis-rtos2/CmsisRtos2Thread.h"
 #elif defined(DMQ_THREAD_QT)
-    #include "port/os/qt/Thread.h"
+    #include "port/os/qt/QtThread.h"
 #endif
 
 namespace dmq::databus {
@@ -81,7 +85,9 @@ enum class Reliability {
 ///
 /// All member functions are safe to call before Start() or AddPeer(); registrations
 /// are stored and applied when the relevant participant is created.
-template <typename Transport, size_t MaxPeers = 4, size_t MaxTopics = 16>
+template <typename Transport,
+          size_t MaxPeers  = dmq::NETWORK_NODE_MAX_PEERS,
+          size_t MaxTopics = dmq::NETWORK_NODE_MAX_TOPICS>
 class NetworkNode {
     using TransportMonitor  = dmq::util::TransportMonitor;
     using RetryMonitor      = dmq::util::RetryMonitor;
@@ -106,6 +112,7 @@ public:
                dmq::Duration watchdog   = std::chrono::seconds(30),
                dmq::Duration tickPeriod = std::chrono::milliseconds(10))
     {
+        dmq::LockGuard<dmq::RecursiveMutex> lock(m_mutex);
         if (m_running) return true;
 
         char threadName[64];
@@ -151,16 +158,26 @@ public:
     /// @brief Stop all transports and exit the receive thread.
     void Stop()
     {
-        if (!m_running) return;
-        m_running = false;
+        {
+            dmq::LockGuard<dmq::RecursiveMutex> lock(m_mutex);
+            if (!m_running) return;
+            m_running = false;
 
-        m_recvTimer.Stop();
-        m_recvConn.Disconnect();
-        m_recvTransport.Close();
+            m_recvTimer.Stop();
+            m_recvConn.Disconnect();
+            m_recvTransport.Close();
+        }
 
+        // Exit the receive thread with no lock held. ReceiverThread() is dispatched
+        // asynchronously via TimerDelegate, so a tick may already be queued on
+        // m_thread when Stop() is called; ExitThread() blocks (join()) until the
+        // thread's dispatch loop drains its queue, which includes running any
+        // already-queued ReceiverThread() tick to completion. That tick acquires
+        // m_mutex too, so holding it here while blocked in join() would deadlock.
         if (m_thread)
             m_thread->ExitThread();
 
+        dmq::LockGuard<dmq::RecursiveMutex> lock(m_mutex);
         for (size_t i = m_peerCount; i > 0; --i) {
             RemoteNode& node = m_peers[i - 1];
             if (!node.active) continue;
@@ -186,6 +203,7 @@ public:
     /// @param port  UDP port the peer listens on.
     void AddPeer(const char* name, const char* addr, uint16_t port)
     {
+        dmq::LockGuard<dmq::RecursiveMutex> lock(m_mutex);
         ASSERT_TRUE(m_peerCount < MaxPeers);
 
         RemoteNode& node = m_peers[m_peerCount];
@@ -265,6 +283,7 @@ public:
               dmq::ISerializer<void(T)>& serializer,
               Reliability rel = Reliability::UNRELIABLE)
     {
+        dmq::LockGuard<dmq::RecursiveMutex> lock(m_mutex);
         ASSERT_TRUE(m_outCount < MaxTopics);
         DataBus::RegisterSerializer<T>(topic, serializer);
         m_outTopics[m_outCount++] = {topic, remoteId, rel};
@@ -293,6 +312,7 @@ public:
                  dmq::DelegateRemoteId remoteId,
                  dmq::ISerializer<void(T)>& serializer)
     {
+        dmq::LockGuard<dmq::RecursiveMutex> lock(m_mutex);
         ASSERT_TRUE(m_inCount < MaxTopics);
 
         // Store a type-erased adder so it can be replayed when Start() creates the participant.
@@ -312,7 +332,9 @@ public:
 private:
     void ReceiverThread()
     {
-        constexpr int MAX_WORK = 20;
+        dmq::LockGuard<dmq::RecursiveMutex> lock(m_mutex);
+        // Override via DMQ_NETWORK_NODE_MAX_WORK in delegatemqconfig.h.
+        constexpr int MAX_WORK = dmq::NETWORK_NODE_MAX_WORK;
 
         if (m_recvParticipant) {
             for (int i = 0; i < MAX_WORK; ++i)
@@ -406,6 +428,7 @@ private:
     dmq::Duration                    m_tickPeriod{};
     dmq::TimePoint                   m_lastMonitorCheck{};
     bool                             m_running = false;
+    mutable dmq::RecursiveMutex      m_mutex;
 };
 
 } // namespace dmq::databus

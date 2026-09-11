@@ -1,7 +1,7 @@
 #ifndef _THREAD_CMSIS_RTOS2_H
 #define _THREAD_CMSIS_RTOS2_H
 
-/// @file Thread.h
+/// @file CmsisRtos2Thread.h
 /// @see https://github.com/DelegateMQ/DelegateMQ
 /// David Lafreniere, 2026.
 ///
@@ -21,9 +21,11 @@
 /// * **Task Integration:** Wraps `osThreadNew` to establish a dedicated worker loop.
 /// * **FullPolicy Support:** Configurable back-pressure (DROP or TIMEOUT) when the
 ///   message queue is full.
-/// * **Priority Support:** Normal and High priorities (uses `msg_prio`).
-/// * **Queue-Based Dispatch:** Uses `osMessageQueue` to receive and process incoming
-///   delegate messages in a thread-safe manner.
+/// * **Priority Support:** Normal and High priorities (uses `osMessageQueuePut`'s
+///   native `msg_prio` argument, via `CmsisRtos2DelegateQueue::Send`'s highPriority flag).
+/// * **Queue-Based Dispatch:** Uses `CmsisRtos2DelegateQueue` (a thin RAII wrapper
+///   around an `osMessageQueue`) to receive and process incoming delegate
+///   messages in a thread-safe manner.
 /// * **Priority Control:** Supports runtime priority configuration via `SetThreadPriority`
 ///   using standard `osPriority_t` levels.
 /// * **Graceful Shutdown:** Implements robust termination logic using semaphores to ensure
@@ -35,6 +37,8 @@
 
 #include "delegate/IThread.h"
 #include "extras/util/Timer.h"
+#include "port/os/common/ThreadMsg.h"
+#include "CmsisRtos2DelegateQueue.h"
 #include "cmsis_os2.h"
 #include <string>
 #include <memory>
@@ -43,19 +47,11 @@
 
 namespace dmq::os {
 
-class ThreadMsg;
+/// @brief Policy applied when the thread message queue is full. See dmq::FullPolicy
+/// in DelegateOpt.h for the canonical definition, shared by every dmq::os::Thread port.
+using FullPolicy = dmq::FullPolicy;
 
-/// @brief Policy applied when the thread message queue is full.
-/// @details Only meaningful when maxQueueSize > 0.
-///   - DROP:    DispatchDelegate() silently discards the message and returns immediately.
-///   - FAULT:   DispatchDelegate() triggers a system fault if the queue is full.
-///   - TIMEOUT: DispatchDelegate() waits up to dispatchTimeout, then logs and drops.
-///
-/// Use DROP for high-rate best-effort topics (sensor telemetry, display updates) where
-/// a stale sample is preferable to stalling the publisher. FAULT is the default.
-enum class FullPolicy { DROP, FAULT, TIMEOUT };
-
-class Thread : public dmq::IThread
+class CmsisRtos2Thread : public dmq::IThread
 {
 public:
 #if defined(DMQ_DATABUS_TOOLS)
@@ -86,14 +82,14 @@ public:
     /// @param fullPolicy Action when queue is full: FAULT (default), DROP, or TIMEOUT.
     /// @param dispatchTimeout Duration to wait before giving up when policy is TIMEOUT.
     /// @param cpuName Optional CPU/Core name grouping for monitoring tools.
-    Thread(const char* threadName, size_t maxQueueSize = 0, FullPolicy fullPolicy = FullPolicy::FAULT,
+    CmsisRtos2Thread(const char* threadName, size_t maxQueueSize = 0, FullPolicy fullPolicy = FullPolicy::FAULT,
            dmq::Duration dispatchTimeout = dmq::DEFAULT_DISPATCH_TIMEOUT, const char* cpuName = "");
     
-    Thread(const std::string& threadName, size_t maxQueueSize = 0, FullPolicy fullPolicy = FullPolicy::FAULT,
+    CmsisRtos2Thread(const std::string& threadName, size_t maxQueueSize = 0, FullPolicy fullPolicy = FullPolicy::FAULT,
            dmq::Duration dispatchTimeout = dmq::DEFAULT_DISPATCH_TIMEOUT, const std::string& cpuName = "")
-        : Thread(threadName.c_str(), maxQueueSize, fullPolicy, dispatchTimeout, cpuName.c_str()) {}
+        : CmsisRtos2Thread(threadName.c_str(), maxQueueSize, fullPolicy, dispatchTimeout, cpuName.c_str()) {}
 
-    ~Thread();
+    ~CmsisRtos2Thread();
 
     /// Called once to create the worker thread. If watchdogTimeout value
     /// provided, the maximum watchdog interval is used. Otherwise no watchdog.
@@ -141,8 +137,8 @@ public:
 #endif
 
 private:
-    Thread(const Thread&) = delete;
-    Thread& operator=(const Thread&) = delete;
+    CmsisRtos2Thread(const CmsisRtos2Thread&) = delete;
+    CmsisRtos2Thread& operator=(const CmsisRtos2Thread&) = delete;
 
     // Entry point
     static void Process(void* argument);
@@ -152,7 +148,7 @@ private:
     void WatchdogCheck();
 
     /// Get registry head using the "Immortal" Pattern
-    static Thread*& GetWatchdogHead();
+    static CmsisRtos2Thread*& GetWatchdogHead();
 
     /// Get registry lock using the "Immortal" Pattern
     static dmq::RecursiveMutex& GetWatchdogLock();
@@ -165,9 +161,10 @@ private:
     osPriority_t m_priority;
 
     osThreadId_t m_thread = NULL;
-    osMessageQueueId_t m_msgq = NULL;
+    CmsisRtos2DelegateQueue m_queue;
     osSemaphoreId_t m_exitSem = NULL; // Semaphore to signal thread completion
     std::atomic<bool> m_exit = false;
+    bool* m_selfExitPtr = nullptr;
     
     // Configurable sizes
     static const uint32_t STACK_SIZE = 2048; // Bytes
@@ -175,7 +172,7 @@ private:
     // Watchdog related members
     std::atomic<dmq::TimePoint> m_lastAliveTime;
     std::atomic<dmq::Duration> m_watchdogTimeout;
-    Thread* m_watchdogNext = nullptr;
+    CmsisRtos2Thread* m_watchdogNext = nullptr;
 
 #if defined(DMQ_DATABUS_TOOLS)
     osMutexId_t m_statMutex = NULL; // Mutex to protect statistics
@@ -196,6 +193,10 @@ private:
     uint64_t m_dispatchCountAll = 0;
 #endif
 };
+
+/// @brief Backward-compatible name: existing code referencing dmq::os::Thread
+/// keeps compiling unchanged against the CMSIS-RTOS2 port.
+using Thread = CmsisRtos2Thread;
 
 } // namespace dmq::os
 
