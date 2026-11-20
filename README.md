@@ -180,7 +180,7 @@ The included GitHub Action workflows (`.github/workflows/`) automatically downlo
 
 ### Prerequisites
 - C++17 compatible compiler (MSVC, GCC, or Clang).
-- CMake 3.10+.
+- CMake 3.16+.
 
 ### Windows (MSVC)
 ```powershell
@@ -191,6 +191,13 @@ cmake --build . --config Release
 ```
 
 The build produces a single executable `Async-DuckDBApp` which runs all examples, stress tests, and unit tests.
+
+### DelegateMQ
+[DelegateMQ](https://github.com/DelegateMQ/DelegateMQ) is fetched from GitHub by CMake's `FetchContent` when CMake configures, at the release tag set by `DMQ_GIT_TAG` in `CMakeLists.txt` (currently `v2.4.1`), and the code links the `DelegateMQ::DelegateMQ` target. Options:
+
+- Another release: `cmake .. -DDMQ_GIT_TAG=<tag>`
+- A local DelegateMQ checkout instead of GitHub: `-DFETCHCONTENT_SOURCE_DIR_DELEGATEMQ=<path>`
+- No network after the first configure: `-DFETCHCONTENT_FULLY_DISCONNECTED=ON`
 
 ---
 *Created by David Lafreniere, 2026.*
