@@ -1,5 +1,14 @@
+# Example CMake command line to create project build files:
+#
+# cmake -B build .
+#
+# DelegateMQ is fetched from GitHub at the release tag DMQ_GIT_TAG when CMake
+# configures. To build against a local DelegateMQ checkout instead, add
+# -DFETCHCONTENT_SOURCE_DIR_DELEGATEMQ=<path>. To configure again without
+# network access, add -DFETCHCONTENT_FULLY_DISCONNECTED=ON.
+
 # Specify the minimum CMake version required
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 
 # Project name and language
 project(Async-DuckDB VERSION 1.0 LANGUAGES C CXX)
@@ -12,7 +21,18 @@ set (DMQ_UTIL "ON")
 set (DMQ_THREAD "DMQ_THREAD_STDLIB")
 set (DMQ_SERIALIZE "DMQ_SERIALIZE_NONE")
 set (DMQ_TRANSPORT "DMQ_TRANSPORT_NONE")
-include("${CMAKE_SOURCE_DIR}/DelegateMQ/DelegateMQ.cmake")
+
+# DelegateMQ release to build against
+set(DMQ_GIT_TAG "v2.4.1" CACHE STRING "DelegateMQ release tag (or branch) to fetch")
+
+include(FetchContent)
+FetchContent_Declare(
+    delegatemq
+    GIT_REPOSITORY https://github.com/DelegateMQ/DelegateMQ.git
+    GIT_TAG        ${DMQ_GIT_TAG}
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(delegatemq)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
@@ -45,11 +65,6 @@ file(GLOB SOURCES
     "Examples/StressTest.cpp"
 )
 
-list(APPEND SOURCES ${DMQ_PORT_SOURCES})
-
-source_group("Delegate Files" FILES ${DMQ_LIB_SOURCES})
-source_group("Port Files" FILES ${DMQ_PORT_ONLY_SOURCES})
-source_group("Extras Files" FILES ${DMQ_EXTRAS_SOURCES})
 source_group("DuckDB Files" FILES "DuckDB/async_duckdb.cpp" "DuckDB/async_duckdb.hpp")
 source_group("Example Files" FILES 
     "Examples/SimpleExample.cpp" 
@@ -64,7 +79,6 @@ source_group("Example Files" FILES
 # 4. Include Paths
 # ------------------------------------------------------------------------------
 include_directories( 
-    ${DMQ_ROOT_DIR}
     DuckDB
     UnitTest
     Examples
@@ -73,7 +87,7 @@ include_directories(
 # ------------------------------------------------------------------------------
 # 5. Build Target
 # ------------------------------------------------------------------------------
-add_executable(Async-DuckDBApp ${SOURCES} ${DMQ_LIB_SOURCES})
+add_executable(Async-DuckDBApp ${SOURCES})
 
 # Add subdirectories to build
 add_subdirectory(UnitTest)
@@ -89,6 +103,7 @@ target_link_libraries(Async-DuckDBApp PRIVATE
     ${DUCKDB_LIB}  # Link against duckdb library
     $<$<PLATFORM_ID:Windows>:ws2_32 rstrtmgr bcrypt winmm>
     UnitTestLib
+    DelegateMQ::DelegateMQ
 )
 
 # ------------------------------------------------------------------------------
