@@ -193,7 +193,7 @@ cmake --build . --config Release
 The build produces a single executable `Async-DuckDBApp` which runs all examples, stress tests, and unit tests.
 
 ### DelegateMQ
-[DelegateMQ](https://github.com/DelegateMQ/DelegateMQ) is fetched from GitHub by CMake's `FetchContent` when CMake configures, at the release tag set by `DMQ_GIT_TAG` in `CMakeLists.txt` (currently `v2.4.1`), and the code links the `DelegateMQ::DelegateMQ` target. Options:
+[DelegateMQ](https://github.com/DelegateMQ/DelegateMQ) is fetched from GitHub by CMake's `FetchContent` when CMake configures, at the release tag set by `DMQ_GIT_TAG` in `CMakeLists.txt` (currently `v3.0.0`), and the code links the `DelegateMQ::DelegateMQ` target. Options:
 
 - Another release: `cmake .. -DDMQ_GIT_TAG=<tag>`
 - A local DelegateMQ checkout instead of GitHub: `-DFETCHCONTENT_SOURCE_DIR_DELEGATEMQ=<path>`
